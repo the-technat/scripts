@@ -1,3 +1,3 @@
 # simplescripts
 
-Repo for lonely scripts
+A repo for lonely scritps.
