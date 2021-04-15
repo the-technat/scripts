@@ -29,6 +29,7 @@ dayOfTheWeek=$(date +%u)
 backupHost=$(uname -n)
 
 ### NC server settings
+# please specify paths without ending /
 sshIP="192.168.63.50"
 sshPort="26127"
 sshUser="nc-backup"
@@ -40,12 +41,12 @@ apacheConfigPath="/etc/apache2"
 apacheConfigDir=$(echo $apacheConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 phpConfigPath="/etc/php"
 phpConfigDir=$(echo $phpConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
-ncPath="/var/www/cloud.technat.ch/"
+ncPath="/var/www/cloud.technat.ch"
 ncDir=$(echo $ncPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 ncDataPath="/nc-data/nc"
 ncDataDir=$(echo $ncDataPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 dbDumpFile="/tmp/"$dbName"_"$currentDate".sql"
-occPath=$ncPath"occ"
+occPath=$ncPath"/occ"
 
 # backup vars
 backupRootPath="/home/technat/cloud.technat.ch/"
@@ -86,7 +87,7 @@ touch -f $logFile
 
 # an empty backup root directory means that this script runs the first time
 # the initial backup will always be a full backup
-lsOfBakRootDir=$(ls $backupRootPath)
+lsOfBakRootDir=$(ls $backupRootPath | grep $backupName)
 # check if this is the inital backup
 if [ -z "$lsOfBakRootDir" ]
 then
@@ -103,7 +104,7 @@ then
 fi
 
 # set nextcloud in maintenance mode
-$sshSyntax "sudo -u www-data php $occPath maintenance:mode --on" >> $logFile
+$sshSyntax "sudo sh -c 'sudo -u www-data php $occPath maintenance:mode --on'" >> $logFile
 $sshSyntax "sudo systemctl stop apache2" >> $logFile
 #############################################################################
 ################################# Functions #################################
@@ -128,72 +129,68 @@ InkrementalBackup() {
 ################################ Main Script ################################
 #############################################################################
 
-case $initialBackup in
-    1)
-        # Initial Backup means we save everything 
-        FullBackup $apacheConfigPath $backupDir
-        FullBackup $phpConfigPath $backupDir
-        FullBackup $ncPath $backupDir
-        FullBackup $ncDataPath $backupDir
-        ;;
+# Normal Daily / Weekly Mode
+if [ $initialBackup -eq 0 ]
+then
+	#--------------------------------- Daily ---------------------------------
+	# run daily incremental backup of config and data dirs
+	if [ ! $dayOfTheWeek -eq 7 ]
+	then
+	    InkrementalBackup $apacheConfigPath $backupDir $lastBackupDir$apacheConfigDir
+	    InkrementalBackup $phpConfigPath $backupDir $lastBackupDir$phpConfigDir
+	    InkrementalBackup $ncPath $backupDir $lastBackupDir$ncDir
+	    InkrementalBackup $ncDataPath $backupDir $lastBackupDir$ncDataDir
+	fi
 
-    0)
-        # No initial backup means we do daily incrementals and weekly full backups
-        #--------------------------------- Daily ---------------------------------
-        # run daily incremental backup of config and data dirs
-        if [ ! $dayOfTheWeek -eq 7 ]
-        then
-            InkrementalBackup $apacheConfigPath $backupDir $lastBackupDir$apacheConfigDir
-            InkrementalBackup $phpConfigPath $backupDir $lastBackupDir$phpConfigDir
-            InkrementalBackup $ncPath $backupDir $lastBackupDir$ncDir
-            InkrementalBackup $ncDataPath $backupDir $lastBackupDir$ncDataDir
-        fi
+	#--------------------------------- Weekly ---------------------------------
+	# run weekly full backup of config and data dirs
+	if [ $dayOfTheWeek -eq 7 ] 
+	then
+	    FullBackup $apacheConfigPath $backupDir
+	    FullBackup $phpConfigPath $backupDir
+	    FullBackup $ncPath $backupDir
+	    FullBackup $ncDataPath $backupDir
+	fi
 
-        #--------------------------------- Weekly ---------------------------------
-        # run weekly full backup of config and data dirs
-        if [ $dayOfTheWeek -eq 7 ] 
-        then
-            FullBackup $apacheConfigPath $backupDir
-            FullBackup $phpConfigPath $backupDir
-            FullBackup $ncPath $backupDir
-            FullBackup $ncDataPath $backupDir
-        fi
+	#--------------------------------- Database ---------------------------------
+	# database dump (happens every day as full backup)
+	$sshSyntax "sudo mysqldump -u root $dbName --result-file $dbDumpFile" >> $logFile
+	if [ $? -eq 0 ]
+	then
+	  # collect dump from nc-server
+	  FullBackup $dbDumpFile $backupDir
+	else
+	  echo "MySQLDump failed, please take a look!" >> $logFile
+	fi
+	# remove dump form nc-server
+	$sshSyntax "sudo rm $dbDumpFile"
+fi
 
-        #--------------------------------- Database ---------------------------------
-        # database dump (happens every day as full backup)
-        # create db dump
-        $sshSyntax "sudo mysqldump -u root $dbName --result-file $dbDumpFile" >> $logFile
-        if [ $? -eq 0 ]
-        then
-          # collect dump from nc-server
-          FullBackup $dbDumpFile $backupDir
-        else
-          echo "MySQLDump failed, please take a look!" >> $logFile
-        fi
-        # remove dump form nc-server
-        $sshSyntax "sudo rm $dbDumpFile"
-
-        ;;
-
-    *)
-        echo "initialBackup variables seems to be unset, this shouldn't be" >> $logFile
-        ;;
+# Initial Backup Mode
+if [ $initialBackup -eq 1 ]
+then
+	# Initial Backup means we save everything 
+	FullBackup $apacheConfigPath $backupDir
+	FullBackup $phpConfigPath $backupDir
+	FullBackup $ncPath $backupDir
+	FullBackup $ncDataPath $backupDir
+fi
 
 #############################################################################
 ################################## Cleanup ##################################
 #############################################################################
 
 # if a folder exists that is one older than the last fullbackup, you can compress and then delete it
-if [ -d $folderOlderThanLastFull ]
+if [ -d $folderOlderThanLastFull ] 
 then
-    # compress backupDir into a backupfile according to the name
+    #compress backupDir into a backupfile according to the name
     tar -cvf $backupFile $folderOlderThanLastFull
     rm -R $folderOlderThanLastFull
 fi
 
 # set maintenance mode off
 $sshSyntax "sudo systemctl start apache2" >> $logFile
-$sshSyntax "sudo -u www-data php $occPath maintenance:mode --off" >> $logFile
+$sshSyntax "sudo sh -c 'sudo -u www-data php $occPath maintenance:mode --off'" >> $logFile
 
 ###### Logfile Writing ######
 echo "finished backup at $(date +%H:%M)" >> $logFile
