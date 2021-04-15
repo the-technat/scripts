@@ -32,7 +32,7 @@ backupHost=$(uname -n)
 sshIP="192.168.63.50"
 sshPort="26127"
 sshUser="nc-backup"
-sshKey="/home/nc-backup/.ssh/faultier_cloud_id_rsa"
+sshKey="/home/technat/.ssh/cloud_id_rsa"
 # sshSyntax="ssh -oStrictHostKeyChecking=no -i $sshKey -p $sshPort $sshUser@$sshIP"
 sshSyntax="ssh -i $sshKey -p $sshPort $sshUser@$sshIP"
 dbName="ncdb"
@@ -45,9 +45,10 @@ ncDir=$(echo $ncPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 ncDataPath="/nc-data/nc"
 ncDataDir=$(echo $ncDataPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 dbDumpFile="/tmp/"$dbName"_"$currentDate".sql"
+occPath=$ncPath"occ"
 
 # backup vars
-backupRootPath="/home/nc-backup/cloud.technat.ch/"
+backupRootPath="/home/technat/cloud.technat.ch/"
 backupName="nc-backup_"
 backupDir=$backupRootPath$backupName$currentDate
 lastBackupDir=$backupRootPath$backupName$yesterday
@@ -62,7 +63,7 @@ folderOlderThanLastFull=$backupRootPath$backupName$olderThanDate # assume the na
 logFileSuffix="_"$currentDate
 logFileName="nc-backup-log"
 logFileEnd=".log"
-logDir="/home/nc-backup/cloud.technat.ch/logs/"
+logDir="/home/technat/cloud.technat.ch/logs/"
 logFile=$logDir$logFileName$logFileSuffix$logFileEnd
 
 #############################################################################
@@ -102,7 +103,7 @@ then
 fi
 
 # set nextcloud in maintenance mode
-$sshSyntax "sudo -u www-data php $ncPath'occ' maintenance:mode --on'" >> $logFile
+$sshSyntax "sudo -u www-data php $occPath maintenance:mode --on" >> $logFile
 $sshSyntax "sudo systemctl stop apache2" >> $logFile
 #############################################################################
 ################################# Functions #################################
@@ -192,7 +193,7 @@ fi
 
 # set maintenance mode off
 $sshSyntax "sudo systemctl start apache2" >> $logFile
-$sshSyntax "sudo -u www-data php $ncPath'occ' maintenance:mode --on'" >> $logFile
+$sshSyntax "sudo -u www-data php $occPath maintenance:mode --off" >> $logFile
 
 ###### Logfile Writing ######
 echo "finished backup at $(date +%H:%M)" >> $logFile
