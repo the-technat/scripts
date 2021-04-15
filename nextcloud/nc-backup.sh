@@ -40,7 +40,7 @@ apacheConfigPath="/etc/apache2"
 apacheConfigDir=$(echo $apacheConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 phpConfigPath="/etc/php"
 phpConfigDir=$(echo $phpConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
-ncPath="/var/www/cloud.technat.ch"
+ncPath="/var/www/cloud.technat.ch/"
 ncDir=$(echo $ncPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 ncDataPath="/nc-data/nc"
 ncDataDir=$(echo $ncDataPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
@@ -102,10 +102,8 @@ then
 fi
 
 # set nextcloud in maintenance mode
-$sshSyntax "sudo sh -c \'cd $ncPath; sudo -u www-data php occ maintenance:mode --on\'" >> $logFile
-$sshSyntax "sudo sh -c 'sudo systemctl reload apache2'" >> $logFile
-sleep 5
-$sshSyntax "sudo sh -c 'sudo systemctl stop apache2'" >> $logFile
+$sshSyntax "sudo -u www-data php $ncPath'occ' maintenance:mode --on'" >> $logFile
+$sshSyntax "sudo systemctl stop apache2" >> $logFile
 #############################################################################
 ################################# Functions #################################
 #############################################################################
@@ -193,8 +191,8 @@ then
 fi
 
 # set maintenance mode off
-$sshSyntax "sudo sh -c 'sudo systemctl start apache2'"
-$sshSyntax "sudo sh -c \'cd $ncPath; sudo -u www-data php occ maintenance:mode --off\'" >> $logFile
+$sshSyntax "sudo systemctl start apache2" >> $logFile
+$sshSyntax "sudo -u www-data php $ncPath'occ' maintenance:mode --on'" >> $logFile
 
 ###### Logfile Writing ######
 echo "finished backup at $(date +%H:%M)" >> $logFile
