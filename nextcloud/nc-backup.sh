@@ -111,10 +111,17 @@ $sshSyntax "sudo systemctl stop apache2" >> $logFile
 #############################################################################
 
 # simple FullBackup function
+# directory indexing takes a lot of time, so fullBackups are not done via rsync but rather using zip and scp
 FullBackup() {
   src=$1
   dest=$2
-  rsync -e "ssh -p $sshPort -i $sshKey" -avp "$sshUser@$sshIP:$src" $dest >> $logFile
+  lastFolder=$(echo $src | egrep -o '[^/]{1,}$')
+  zipName=$zipName".zip"
+  # rsync -e "ssh -p $sshPort -i $sshKey" -avp "$sshUser@$sshIP:$src" $dest >> $logFile
+  $sshSyntax "zip -r $zipName $src" $logFile
+  scp -P $sshPort -i $sshKey $sshUser@$sshIP:$zipName $dest >> $logFile
+  unzip $dest$zipName
+  $sshSyntax "rm -rf $zipName" >> $logFile
 }
 
 # simple InkrementalBackup function
