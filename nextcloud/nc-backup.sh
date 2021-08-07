@@ -105,7 +105,7 @@ fi
 
 # set nextcloud in maintenance mode
 $sshSyntax "sudo sh -c 'sudo -u www-data php $occPath maintenance:mode --on'" >> $logFile
-$sshSyntax "sudo systemctl stop apache2" >> $logFile
+# $sshSyntax "sudo systemctl stop apache2" >> $logFile
 #############################################################################
 ################################# Functions #################################
 #############################################################################
