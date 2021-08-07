@@ -7,6 +7,7 @@ Version:  1.1
 History   User    Date        Change
           technat 05.06.2020  Initial Version 1.0
           technat 15.04.2021  refine script, make ready for productive use
+          technwt 07.08.2021  fix some bugs
 Description: a backup script for nextcloud that saves all important config directorys, databases and data directories using rsync to a remote server over ssh
 Cronjob: 0 22 */1 * * /vault/scripts/nc-backup.sh
 Dependency: rsync, openssh, nailutils
@@ -21,51 +22,48 @@ Header
 ################################# Variables #################################
 #############################################################################
 
-### General
+####################### Backup Settings (required) ##########################
+# please specify paths without ending /
+dbName="ncdb" # Name of the database on the server to backup
+sshIP="192.168.63.50" # IP of the nextcloud server
+sshPort="26127" # SSH Port
+sshUser="nc-backup" # User to use for backups (needs read access to the nextcloud webroot and data)
+sshKey="/home/technat/.ssh/cloud_id_rsa" # an SSH Key whihc can login to the above user without a passphrase
+ncPath="/var/www/cloud.technat.ch" # Webroot of nextcloud
+ncDataPath="/nc-data/nc" # Data of nextcloud
+backupRootPath="/home/technat/cloud.technat.ch/" # Path on this server where to store the backups (Dir must not exist)
+
+####################### Optional settings #################################### 
+backupHost=$(uname -n) # Name of the backup server
+logDir="$backupRootPath/logs"
+logFileSuffix="_"$currentDate
+logFileName="nc-backup-log"
+logFileEnd=".log"
+compressOlderThan=8 #compress folders older than 8 days (has to be a number bigger than your last full backup you use to compare)
+backupName="nc-backup_" #
+dbDumpFile="/tmp/"$dbName"_"$currentDate".sql" # A place where we have temporary access to save a DB dump
+
+
+################### System variables !! Don't edit them !! ###################
 currentDate=$(date +%Y-%m-%d)
 yesterday=$(date --date="yesterday" +%Y-%m-%d)
 backupStartTime=$(date +%H:%M)
 dayOfTheWeek=$(date +%u)
-backupHost=$(uname -n)
-
-### NC server settings
-# please specify paths without ending /
-sshIP="192.168.63.50"
-sshPort="26127"
-sshUser="nc-backup"
-sshKey="/home/technat/.ssh/cloud_id_rsa"
+logFile=$logDir$logFileName$logFileSuffix$logFileEnd
+occPath=$ncPath"/occ"
+olderThanDate=$(date --date="$compressOlderThan days ago" +%Y-%m-%d) # holds the date from where on older backups can be rotated
+backupFile=$backupRootPath$backupName$olderThanDate".bz2" # name of archived backup files
+backupDir=$backupRootPath$backupName$currentDate
+lastBackupDir=$backupRootPath$backupName$yesterday
+folderOlderThanLastFull=$backupRootPath$backupName$olderThanDate # assume the name of the backup to rotate
 # sshSyntax="ssh -oStrictHostKeyChecking=no -i $sshKey -p $sshPort $sshUser@$sshIP"
 sshSyntax="ssh -i $sshKey -p $sshPort $sshUser@$sshIP"
-dbName="ncdb"
 apacheConfigPath="/etc/apache2"
 apacheConfigDir=$(echo $apacheConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
 phpConfigPath="/etc/php"
 phpConfigDir=$(echo $phpConfigPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
-ncPath="/var/www/cloud.technat.ch"
 ncDir=$(echo $ncPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
-ncDataPath="/nc-data/nc"
 ncDataDir=$(echo $ncDataPath | egrep -o "/[a-zA-Z0-9\.\-\_]{1,}/?$")
-dbDumpFile="/tmp/"$dbName"_"$currentDate".sql"
-occPath=$ncPath"/occ"
-
-# backup vars
-backupRootPath="/home/technat/cloud.technat.ch/"
-backupName="nc-backup_"
-backupDir=$backupRootPath$backupName$currentDate
-lastBackupDir=$backupRootPath$backupName$yesterday
-
-# backup rotation
-compressOlderThan=8 #compress folders older than 8 days (has to be a number bigger than your last full backup you use to compare)
-olderThanDate=$(date --date="$compressOlderThan days ago" +%Y-%m-%d) # holds the date from where on older backups can be rotated
-backupFile=$backupRootPath"nc-backup_"$olderThanDate".bz2" # name of archived backup files
-folderOlderThanLastFull=$backupRootPath$backupName$olderThanDate # assume the name of the backup to rotate
-
-# logFile Settings
-logFileSuffix="_"$currentDate
-logFileName="nc-backup-log"
-logFileEnd=".log"
-logDir="/home/technat/cloud.technat.ch/logs/"
-logFile=$logDir$logFileName$logFileSuffix$logFileEnd
 
 #############################################################################
 ############################### Preparations ################################
@@ -74,7 +72,7 @@ logFile=$logDir$logFileName$logFileSuffix$logFileEnd
 ###### Logfile Writing ######
 echo "------------------- Backup log from nc-backup ($backupHost) -------------------" >> $logFile
 echo "Starting backup from $currentDate at $backupStartTime" >> $logFile
-### End Logfile Writing ###
+### End Logfile Writing ####
 
 # first check if log directory exists
 if [ ! -d "$logDir" ]
@@ -116,7 +114,7 @@ FullBackup() {
   src=$1
   dest=$2
   lastFolder=$(echo $src | egrep -o '[^/]{1,}$')
-  zipName=$zipName".zip"
+  zipName=$lastFolder".zip"
   # rsync -e "ssh -p $sshPort -i $sshKey" -avp "$sshUser@$sshIP:$src" $dest >> $logFile
   $sshSyntax "zip -r $zipName $src" $logFile
   scp -P $sshPort -i $sshKey $sshUser@$sshIP:$zipName $dest >> $logFile
@@ -139,6 +137,8 @@ InkrementalBackup() {
 # Normal Daily / Weekly Mode
 if [ $initialBackup -eq 0 ]
 then
+  
+
 	#--------------------------------- Daily ---------------------------------
 	# run daily incremental backup of config and data dirs
 	if [ ! $dayOfTheWeek -eq 7 ]
