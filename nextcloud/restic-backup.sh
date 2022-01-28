@@ -72,3 +72,6 @@ pg_dump -U www-data -w $DB_NAME -F p | restic backup -v --stdin --stdin-filename
 
 # disable maintenance mode
 php $WEBROOT_DIR/occ maintenance:mode --off
+
+# forget and prune old backups
+restic forget -q --prune --keep-hourly 24 --keep-daily 7
